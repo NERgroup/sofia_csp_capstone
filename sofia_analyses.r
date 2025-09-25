@@ -1,9 +1,12 @@
+# Notes -------------------------------------------------------------------
+## gonad datasets only include 2025 rn 
+## need to add in processed dissection data 
 
+# Load First --------------------------------------------------------------
 install.packages('librarian')
 require(librarian)
 librarian::shelf(tidyverse,here, janitor, googlesheets4, lubridate, splitstackshape,
-                 googledrive,googlesheets4,httpuv,dplyr,ggplot2,pwr2)
-
+                 googledrive,googlesheets4,httpuv,dplyr,ggplot2,pwr2, tidyr, broom)
 
 
 # Data Sets ---------------------------------------------------------------
@@ -12,7 +15,7 @@ spawn_raw <- read_sheet("https://docs.google.com/spreadsheets/d/11DLr38iVRDcvWiD
 
 gonad_raw <- read_sheet("https://docs.google.com/spreadsheets/d/1Ih-hBXRtfXVMdxw5ibZnXy_dZErdcx5FfeKMSc0HEc4/edit?usp=sharing")
 
-load("kelp_recovery_data.rda")
+load("/Users/sofiarivas/Downloads/kelp_recovery_data.rda")
 
 #delete unnecessary rows
 spawn_working <- subset(spawn_raw, select = -c(Data_Enterer,Gonad_Mass_total,Spawn_Mass_total,Treatment))
@@ -23,12 +26,13 @@ gonad_working <- subset(gonad_raw, select = -c(Institution,Name_of_Data_Enterer,
   filter(!is.na(Gonad_Mass_g)) %>% 
   mutate(site_id = paste(Site_Number, Transect)) %>% 
   filter(year(Date_Collected) == 2025,
-         Gonad_Mass_g<20)
+         Gonad_Mass_g<30) %>% 
+  filter(!str_starts(Site_Number, "MAR"))
 
 urchin_sizefq_1 <- urchin_sizefq %>%
-  filter(species=="purple_urchin") %>% 
+  filter(species=="Purple") %>% 
   mutate(site_id = paste(site, site_type,zone)) %>% 
-  filter(year(survey_date) == 2025)
+  filter(year(survey_date) == 2025) 
 
 #make values numeric
 spawn_working$Spawn_Mass_g <- as.numeric(as.character(spawn_working$Spawn_Mass_g))
@@ -111,13 +115,14 @@ ggplot(urchin_sizefq [1:18,],
   geom_col(fill="skyblue3")+
   theme_classic()
 
+#urchin sizefq for site/type/zone 
 ggplot(urchin_sizefq_1,
        aes(x=size_cm, y=count))+
   facet_wrap(~site_id)+
   geom_col(fill="skyblue3")+
   theme_classic()
 
-#urchin diameter x gonad mass for site/type/zone (just first zone in dataset)
+#urchin diameter x gonad mass for site/type/zone (y=mx+b)
 ggplot(gonad_working,
        aes(x=Test_Diameter_mm, y=Gonad_Mass_g))+
   facet_wrap(~site_id)+
@@ -127,7 +132,7 @@ ggplot(gonad_working,
 
 # Stats -------------------------------------------------------------------
 
-#y=mx+b for the first set of site/type/zone
+#y=mx+b for the first set of site/type/zone 
 regression <- lm(Gonad_Mass_g ~ Test_Diameter_mm, data = gonad_working [1:27,])
 summary(regression)
 
@@ -139,22 +144,7 @@ avg_urchin_density <- quad_data %>%
   mutate(density80m2 = avg_density*80)
 
 
-library(dplyr)
-library(broom)
-
-coeff_table <- gonad_working %>%
-  group_by(site_id) %>%
-  do(model = lm(Gonad_Mass_g ~ Test_Diameter_mm, data = .)) %>%
-  tidy(model) %>%   # extract coefficients
-  ungroup() %>%
-  select(site_id, term, estimate, std.error, statistic, p.value)
-
-coeff_table
-
-library(dplyr)
-library(tidyr)
-library(broom)
-
+#model for urchin size 
 coeff_table <- gonad_working %>%
   group_by(site_id) %>%
   nest() %>%
@@ -163,16 +153,10 @@ coeff_table <- gonad_working %>%
   unnest(tidied) %>%
   select(site_id, term, estimate, std.error, statistic, p.value)
 
-coeff_table
-view(coeff_table)
-
 coeff_wide <- coeff_table %>%
   select(site_id, term, estimate) %>%
   pivot_wider(names_from = term, values_from = estimate) %>% 
   rename(b = "(Intercept)", a = "Test_Diameter_mm")
-
-coeff_wide
-view(coeff_wide)
 
 #sample from size distribution
 
