@@ -139,8 +139,10 @@ summary(regression)
 #avg urchin density per site/type/zone 
 avg_urchin_density <- quad_data %>% 
   group_by(site, site_type, zone) %>%
-  mutate(site_id = paste(site, site_type, zone)) %>% 
+  # mutate(site_id = paste(site, site_type, zone)) %>% 
   summarize(avg_density = mean(purple_urchin_densitym2, na.rm = TRUE)) %>% 
+  ungroup() %>% 
+  unite(col = site_id, site, site_type, zone, sep=" ", remove = FALSE) %>%
   mutate(density80m2 = avg_density*80)
 
 
@@ -172,5 +174,5 @@ sampled <- avg_urchin_density %>%
   ) %>%
   select(site_id, sampled) %>%
   unnest(sampled)
-
+ 
 
