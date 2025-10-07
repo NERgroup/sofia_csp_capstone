@@ -130,6 +130,24 @@ ggplot(gonad_working,
   geom_smooth(method = "lm", se = FALSE, color = "aquamarine4")+
   theme_classic()
 
+#sampling 
+ggplot(sampled_urchins_80, aes(x = sampled_sizes)) +
+  geom_histogram(binwidth = 1, color = "white") +
+  facet_wrap(~ site_id, scales = "free_y") +
+  labs(
+    title = "Simulated Urchin Size Distributions by Site",
+    x = "Urchin size (cm)",
+    y = "Count of sampled individuals"
+  ) +
+  theme_classic(base_size = 13)
+
+ggplot(sampled_urchins, aes(x = sampled_sizes, fill = site_id)) +
+  geom_density(alpha = 0.4) +
+  facet_wrap(~ site_id, scales = "free_y") +
+  labs(x = "Urchin size (cm)", y = "Density") +
+  theme_classic(base_size = 13)
+
+
 # Stats -------------------------------------------------------------------
 
 #y=mx+b for the first set of site/type/zone 
@@ -161,18 +179,51 @@ coeff_wide <- coeff_table %>%
   rename(b = "(Intercept)", a = "Test_Diameter_mm")
 
 #sample from size distribution
+library(purrr)
 
-sampled <- avg_urchin_density %>%                              
-  left_join(
-    sizes %>% group_by(site_id) %>% nest(),            
-    by = "site_id"
+sampled_urchins <- avg_urchin_density %>%
+  left_join(urchin_sizefq_1, by = "site_id") %>%
+  group_by(site_id) %>%
+  summarise(
+    sampled_sizes = list({
+      valid <- !is.na(count) & count > 0
+      clean_counts <- count[valid]
+      clean_sizes  <- size_cm[valid]
+      n_to_sample <- round(first(avg_density))
+      if (length(clean_counts) == 0 || sum(clean_counts) == 0 || n_to_sample == 0) {rep(NA, n_to_sample)} 
+      else {sample(
+          clean_sizes,
+          size = n_to_sample,
+          replace = TRUE,
+          prob = clean_counts / sum(clean_counts))}}),
+    .groups = "drop") %>%
+  unnest(cols = sampled_sizes)
+
+sampled_urchins_80 <- avg_urchin_density %>%
+  left_join(urchin_sizefq_1, by = "site_id") %>%
+  group_by(site_id) %>%
+  summarise(
+    sampled_sizes = list({
+      # filter valid (non-missing, nonzero) counts
+      valid <- !is.na(count) & count > 0
+      clean_counts <- count[valid]
+      clean_sizes  <- size_cm[valid]
+      
+      n_to_sample <- round(first(density80m2))
+      
+      if (length(clean_counts) == 0 || sum(clean_counts) == 0 || n_to_sample == 0) {
+        # return NA values if data invalid or density is zero
+        rep(NA, n_to_sample)
+      } else {
+        sample(
+          clean_sizes,
+          size = n_to_sample,
+          replace = TRUE,
+          prob = clean_counts / sum(clean_counts)
+        )
+      }
+    }),
+    .groups = "drop"
   ) %>%
-  mutate(
-    sampled = map2(avg_urchin_density, density80m2, ~ {                  
-      sample(.x$size_cm, urchin_sizefq_1 = .y, replace = TRUE)    
-    })
-  ) %>%
-  select(site_id, sampled) %>%
-  unnest(sampled)
- 
+  unnest(cols = sampled_sizes)
 
