@@ -1,6 +1,4 @@
-# Notes -------------------------------------------------------------------
-## gonad datasets only include 2025 rn 
-## need to add in processed dissection data 
+rm(list=ls())
 
 # Load First --------------------------------------------------------------
 install.packages('librarian')
@@ -13,9 +11,13 @@ librarian::shelf(tidyverse,here, janitor, googlesheets4, lubridate, splitstacksh
 
 spawn_raw <- read_sheet("https://docs.google.com/spreadsheets/d/11DLr38iVRDcvWiDoBY1hl_Cn5M9oAxDwBRQsx_eMbHk/edit?usp=sharing") 
 
-gonad_raw <- read_sheet("https://docs.google.com/spreadsheets/d/1Ih-hBXRtfXVMdxw5ibZnXy_dZErdcx5FfeKMSc0HEc4/edit?usp=sharing")
+gonad_raw <- read_sheet("https://docs.google.com/spreadsheets/d/18R1F5KkILws3e-8CYz83BdGYMG8zeuvOIeKcaSXeqC4/edit?gid=1621016945#gid=1621016945")
 
-load("/Users/sofiarivas/Downloads/kelp_recovery_data.rda")
+
+load("/Users/sofiarivas/Downloads/kelp_recovery_data (1).rda")
+
+load("/Users/sofiarivas/Downloads/lda_patch_transitionsv2.rda")
+
 
 #delete unnecessary rows
 spawn_working <- subset(spawn_raw, select = -c(Data_Enterer,Gonad_Mass_total,Spawn_Mass_total,Treatment))
@@ -165,7 +167,7 @@ avg_urchin_density <- quad_data %>%
   ungroup() %>% 
   unite(col = site_id, site, site_type, zone, sep=" ", remove = FALSE) %>%
   mutate(density80m2 = avg_density*80) #%>% 
-  #mutate(site_id = toupper(site_id))
+#mutate(site_id = toupper(site_id))
 
 
 #model for urchin size 
@@ -196,10 +198,10 @@ sampled_urchins <- avg_urchin_density %>%
       n_to_sample <- round(first(avg_density))
       if (length(clean_counts) == 0 || sum(clean_counts) == 0 || n_to_sample == 0) {rep(NA, n_to_sample)} 
       else {sample(
-          clean_sizes,
-          size = n_to_sample,
-          replace = TRUE,
-          prob = clean_counts / sum(clean_counts))}}),
+        clean_sizes,
+        size = n_to_sample,
+        replace = TRUE,
+        prob = clean_counts / sum(clean_counts))}}),
     .groups = "drop") %>%
   unnest(cols = sampled_sizes)
 
@@ -220,7 +222,7 @@ sampled_urchins_80 <- avg_urchin_density %>%
           replace = TRUE,
           prob = clean_counts / sum(clean_counts))}}),
     .groups = "drop") %>%
-     unnest(cols = sampled_sizes)
+  unnest(cols = sampled_sizes)
 
 coeff_wide2 <- coeff_wide %>%
   mutate(site_id = site_id %>%
@@ -244,8 +246,8 @@ converted_measurements <- sampled_urchins_802 %>%
   left_join(coeff_wide2, by = "site_id") %>%
   mutate(
     predicted_mass = a * sampled_sizes + b) #%>%
-  #drop sites without dissected urchins
-  #filter(!(is.na(predicted_mass)))
+#drop sites without dissected urchins
+#filter(!(is.na(predicted_mass)))
 
 setdiff(sampled_urchins_802$site_id, coeff_wide2$site_id)
 
