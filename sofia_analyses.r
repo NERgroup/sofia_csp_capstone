@@ -27,7 +27,10 @@ gonad_working <- subset(gonad_raw, select = -c(Institution,Name_of_Data_Enterer,
   mutate(site_id = paste(Site_Number, Transect)) %>% 
   filter(year(Date_Collected) == 2025,
          Gonad_Mass_g<30) %>% 
-  filter(!str_starts(Site_Number, "MAR"))
+  filter(!str_starts(Site_Number, "MAR")) %>% 
+  mutate(site_id = gsub("DEEP$", "Deep", site_id)) %>%
+  mutate(site_id = gsub("SHALLOW$", "Shallow", site_id))
+
 
 urchin_sizefq_1 <- urchin_sizefq %>%
   filter(species=="Purple") %>% 
@@ -161,7 +164,8 @@ avg_urchin_density <- quad_data %>%
   summarize(avg_density = mean(purple_urchin_densitym2, na.rm = TRUE)) %>% 
   ungroup() %>% 
   unite(col = site_id, site, site_type, zone, sep=" ", remove = FALSE) %>%
-  mutate(density80m2 = avg_density*80)
+  mutate(density80m2 = avg_density*80) #%>% 
+  #mutate(site_id = toupper(site_id))
 
 
 #model for urchin size 
@@ -204,26 +208,25 @@ sampled_urchins_80 <- avg_urchin_density %>%
   group_by(site_id) %>%
   summarise(
     sampled_sizes = list({
-      # filter valid (non-missing, nonzero) counts
       valid <- !is.na(count) & count > 0
       clean_counts <- count[valid]
       clean_sizes  <- size_cm[valid]
-      
       n_to_sample <- round(first(density80m2))
-      
-      if (length(clean_counts) == 0 || sum(clean_counts) == 0 || n_to_sample == 0) {
-        # return NA values if data invalid or density is zero
-        rep(NA, n_to_sample)
-      } else {
+      if (length(clean_counts) == 0 || sum(clean_counts) == 0 || n_to_sample == 0) {rep(NA, n_to_sample)} 
+      else {
         sample(
           clean_sizes,
           size = n_to_sample,
           replace = TRUE,
-          prob = clean_counts / sum(clean_counts)
-        )
-      }
-    }),
-    .groups = "drop"
-  ) %>%
-  unnest(cols = sampled_sizes)
+          prob = clean_counts / sum(clean_counts))}}),
+    .groups = "drop") %>%
+     unnest(cols = sampled_sizes)
+
+#convert diameter to mass
+converted_measurements <- sampled_urchins %>%
+  left_join(coeff_wide, by = "site_id") %>%
+  mutate(
+    predicted_mass = a * sampled_sizes + b)
+
+setdiff(sampled_urchins$site_id, coeff_wide$site_id)
 
