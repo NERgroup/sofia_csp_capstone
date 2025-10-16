@@ -1,4 +1,5 @@
 #just gonad data, no spawning data
+#do i need to convert to cm? 
 rm(list=ls())
 
 # Load First --------------------------------------------------------------
@@ -109,24 +110,74 @@ ggplot(sampled_urchins, aes(x = sampled_sizes, fill = site_id)) +
   theme_classic(base_size = 13)
 
 
+#just showing converted measurements linearly
+ggplot(converted_measurements, aes(x = sampled_sizes, y = predicted_mass, color = site_id)) +
+  geom_point() +                                   # plots the predicted points
+  geom_line() +                                    # connects them (optional)
+  labs(
+    title = "Predicted Urchin Mass by Size",
+    x = "Urchin Size (mm)",
+    y = "Predicted Mass (g)",
+    color = "Site ID"
+  ) +
+  theme_classic()
+
+ggplot(converted_measurements, aes(x = sampled_sizes, y = predicted_mass)) +
+  geom_point(color = "steelblue") +
+  geom_line(color = "darkblue") +
+  facet_wrap(~ site_id, scales = "free") +  # separate panel per site
+  labs(
+    title = "Predicted Urchin Mass by Size and Site",
+    x = "Urchin Size (mm)",
+    y = "Predicted Mass (g)") +
+  theme_classic() 
+
+#toal gonad mass per site 
+ggplot(gonad_mass_summ, aes(x = site_id, y = total_gonad_mass, fill = site_id)) +
+  geom_col() +
+  labs(
+    title = "Total Gonad Mass per Site",
+    x = "Site",
+    y = "Total Gonad Mass (g)"
+  ) +
+  theme_classic() +
+  theme(
+    legend.position = "none",
+    axis.text.x = element_text(angle = 45, hjust = 1))
+
+ggplot(converted_measurements, aes(x = site_id, y = predicted_mass, fill = site_id)) +
+  geom_boxplot(outlier.shape = NA, alpha = 0.7) +  # hides default outliers
+  geom_jitter(width = 0.2, alpha = 0.5, color = "black") +  # adds points
+  labs(
+    title = "Urchin Gonad Mass by Site",
+    x = "Site",
+    y = "Gonad Mass (g)"
+  ) +
+  theme_classic() +
+  theme(
+    legend.position = "none",
+    axis.text.x = element_text(angle = 45, hjust = 1))
+
+
+
 # Stats -------------------------------------------------------------------
 
 #avg urchin density per site/type/zone 
-avg_urchin_density <- quad_data %>% 
-  group_by(site, site_type, zone) %>%
+avg_urchin_density <- quad_joined %>% 
+  group_by(site_id) %>%
   # mutate(site_id = paste(site, site_type, zone)) %>% 
   summarize(avg_density = mean(purple_urchin_densitym2, na.rm = TRUE)) %>% 
   ungroup() %>% 
-  unite(col = site_id, site, site_type, zone, sep=" ", remove = FALSE) %>%
+  #unite(col = site_id, site, site_type, zone, sep=" ", remove = FALSE) %>%
   mutate(density80m2 = avg_density*80) #%>% 
 #mutate(site_id = toupper(site_id))
 
 
 #model for urchin size 
-coeff_table <- gonad_working %>%
+coeff_table <- gonad_patch_joined %>%
   group_by(site_id) %>%
   nest() %>%
-  mutate(model = map(data, ~ lm(Gonad_Mass_g ~ Test_Diameter_mm, data = .)),
+  mutate(model = map(data, ~ lm(gonad_mass_g ~ test_diameter_mm, data = .)),
          tidied = map(model, tidy)) %>%
   unnest(tidied) %>%
   select(site_id, term, estimate, std.error, statistic, p.value)
@@ -134,13 +185,13 @@ coeff_table <- gonad_working %>%
 coeff_wide <- coeff_table %>%
   select(site_id, term, estimate) %>%
   pivot_wider(names_from = term, values_from = estimate) %>% 
-  rename(b = "(Intercept)", a = "Test_Diameter_mm")
+  rename(b = "(Intercept)", a = "test_diameter_mm")
 
 #sample from size distribution
 library(purrr)
 
 sampled_urchins <- avg_urchin_density %>%
-  left_join(urchin_sizefq_1, by = "site_id") %>%
+  left_join(urchin_sizefq_joined, by = "site_id") %>%
   group_by(site_id) %>%
   summarise(
     sampled_sizes = list({
@@ -158,7 +209,7 @@ sampled_urchins <- avg_urchin_density %>%
   unnest(cols = sampled_sizes)
 
 sampled_urchins_80 <- avg_urchin_density %>%
-  left_join(urchin_sizefq_1, by = "site_id") %>%
+  left_join(urchin_sizefq_joined, by = "site_id") %>%
   group_by(site_id) %>%
   summarise(
     sampled_sizes = list({
@@ -176,30 +227,21 @@ sampled_urchins_80 <- avg_urchin_density %>%
     .groups = "drop") %>%
   unnest(cols = sampled_sizes)
 
-coeff_wide2 <- coeff_wide %>%
-  mutate(site_id = site_id %>%
-           tolower() %>%                 # make lowercase
-           str_replace_all(" ", "_") %>% # replace spaces with _
-           str_replace_all("-", "_")     # replace hyphens with _
-  )
-
-sampled_urchins_802 <- sampled_urchins_80 %>%
-  mutate(site_id = site_id %>%
-           # Remove any underscore immediately after letters at start (e.g., REC_)
-           str_replace("^([A-Za-z]+)_", "\\1") %>%
-           # Make everything lowercase
-           tolower() %>%
-           # Replace spaces and hyphens with underscores
-           str_replace_all("[ -]", "_")
-  )
-
 #convert diameter to mass
-converted_measurements <- sampled_urchins_802 %>%    
-  left_join(coeff_wide2, by = "site_id") %>%
+converted_measurements <- sampled_urchins_80 %>%    
+  left_join(coeff_wide, by = "site_id") %>%
   mutate(
     predicted_mass = a * sampled_sizes + b) #%>%
 #drop sites without dissected urchins
 #filter(!(is.na(predicted_mass)))
+setdiff(sampled_urchins_80$site_id, coeff_wide$site_id)
 
-setdiff(sampled_urchins_802$site_id, coeff_wide2$site_id)
+
+#sum of mass per site
+gonad_mass_summ <- converted_measurements %>%
+  group_by(site_id) %>%
+  summarise(total_gonad_mass = sum(predicted_mass, na.rm = TRUE))
+
+gonad_mass_summary
+
 
