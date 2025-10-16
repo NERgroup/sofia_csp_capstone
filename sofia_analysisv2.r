@@ -145,20 +145,13 @@ ggplot(gonad_mass_summ, aes(x = site_id, y = total_gonad_mass, fill = site_id)) 
     legend.position = "none",
     axis.text.x = element_text(angle = 45, hjust = 1))
 
+ggplot(gonad_mass_summ, aes(x = site_id, y = total_gonad_mass, fill = site_id))+
+  geom_boxplot(outlier.shape = NA, alpha = 0.7) +  # hides default outliers
+  geom_jitter(width = 0.2, alpha = 0.5, color = "black") 
+
 ggplot(converted_measurements, aes(x = site_id, y = predicted_mass, fill = site_id)) +
   geom_boxplot(outlier.shape = NA, alpha = 0.7) +  # hides default outliers
-  geom_jitter(width = 0.2, alpha = 0.5, color = "black") +  # adds points
-  labs(
-    title = "Urchin Gonad Mass by Site",
-    x = "Site",
-    y = "Gonad Mass (g)"
-  ) +
-  theme_classic() +
-  theme(
-    legend.position = "none",
-    axis.text.x = element_text(angle = 45, hjust = 1))
-
-
+  geom_jitter(width = 0.2, alpha = 0.5, color = "black")  # adds points
 
 # Stats -------------------------------------------------------------------
 
@@ -237,11 +230,11 @@ converted_measurements <- sampled_urchins_80 %>%
 setdiff(sampled_urchins_80$site_id, coeff_wide$site_id)
 
 
-#sum of mass per site
-gonad_mass_summ <- converted_measurements %>%
+gonad_mass_summ<- converted_measurements %>%
   group_by(site_id) %>%
-  summarise(total_gonad_mass = sum(predicted_mass, na.rm = TRUE))
+  summarise(total_gonad_mass = sum(predicted_mass, na.rm = TRUE)) %>%
+  mutate(gonad_mass_per_m2 = total_gonad_mass / 80)
 
-gonad_mass_summary
+gonad_mass_summ
 
 
