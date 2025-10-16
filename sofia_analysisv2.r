@@ -153,7 +153,7 @@ ggplot(converted_measurements, aes(x = site_id, y = predicted_mass, fill = site_
   geom_boxplot(outlier.shape = NA, alpha = 0.7) +  # hides default outliers
   geom_jitter(width = 0.2, alpha = 0.5, color = "black")  # adds points
 
-# Stats -------------------------------------------------------------------
+# Stats and Calculations-------------------------------------------------------------------
 
 #avg urchin density per site/type/zone 
 avg_urchin_density <- quad_joined %>% 
