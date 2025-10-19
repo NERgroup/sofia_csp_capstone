@@ -13,9 +13,12 @@ librarian::shelf(tidyverse,here, janitor, googlesheets4, lubridate, splitstacksh
 
 gonad_raw <- read_sheet("https://docs.google.com/spreadsheets/d/18R1F5KkILws3e-8CYz83BdGYMG8zeuvOIeKcaSXeqC4/edit?gid=1621016945#gid=1621016945")
 
-load("/Users/sofiarivas/Downloads/kelp_recovery_data (1).rda")
+load("/Users/sofiarivas/Downloads/kelp_recovery_data (1).rda") #Sofia
+#load("/Volumes/enhydra/data/kelp_recovery/MBA_kelp_forest_database/processed/recovery/kelp_recovery_data.rda") #Josh
 
-load("/Users/sofiarivas/Downloads/lda_patch_transitionsv2.rda")
+load("/Users/sofiarivas/Downloads/lda_patch_transitionsv2.rda") #Sofia
+#load("/Users/jossmith/code_respositories/kelp_recovery/output/lda_patch_transitionsv2.rda") #Josh
+
 
 # Reworking Data ----------------------------------------------------------
 
@@ -48,7 +51,7 @@ gonad_working2 <- gonad_raw %>%
 #patch types
 patch_types <- transitions_tbl_constrained %>%
   mutate(site_id = paste (site,site_type,zone)) %>% 
-  rename_with(~ gsub("patch_", "", .x))
+  rename_with(~ gsub("patch_", "", .x)) %>%
   pivot_longer(cols = c(`2024`, `2025`), names_to = "year", values_to = "new_zone") %>%
   mutate(year = as.numeric(year))
   
