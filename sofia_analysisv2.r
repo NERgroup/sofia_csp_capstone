@@ -50,14 +50,15 @@ gonad_working2 <- gonad_raw %>%
 
 #patch types
 patch_types <- transitions_tbl_constrained %>%
-  mutate(site_id = paste (site,site_type,zone)) %>% 
   rename_with(~ gsub("patch_", "", .x)) %>%
-  pivot_longer(cols = c(`2024`, `2025`), names_to = "year", values_to = "new_zone") %>%
-  mutate(year = as.numeric(year))
+  pivot_longer(cols = c(`2024`, `2025`), names_to = "year", values_to = "new_type") %>%
+  mutate(year = as.numeric(year)) %>% 
+  mutate(site_id = paste (site,new_type,zone))
   
 #joined gonad data with patch types 
 gonad_patch_joined <- left_join(gonad_working2, patch_types, by = "site_id") %>% 
-  mutate(site_type.x = if_else(year == 2024, `2024`, `2025`)) %>% 
+  rename(year = year.y) %>% 
+  mutate(site_type.x = if_else(year == 2024, "2024", "2025")) %>% 
   mutate(site_id = paste(site_id, year))
   
 urchin_sizefq_1 <- urchin_sizefq %>%
@@ -66,17 +67,20 @@ urchin_sizefq_1 <- urchin_sizefq %>%
   mutate(site_id = paste(site, site_type,zone)) 
 
 #joined urchin size frequency data with patch types
-urchin_sizefq_joined <- left_join(urchin_sizefq_1, patch_types, by = "site_id") %>% 
-  mutate(site_type.x = if_else(year == 2024, `2024`, `2025`)) %>% 
-  mutate(site_id = paste(site_id, year))
+urchin_sizefq_joined <- left_join(urchin_sizefq_1, patch_types, by = "site_id") %>%
+  mutate(site_type.x = if_else(year.y == 2024, "2024", "2025")) %>%
+  mutate(site_id = paste(site_id, year.y)) %>% 
+  rename (year = year.y)
 
 quad_working <- quad_data %>% 
   mutate(year = year(survey_date)) %>% 
   mutate(site_id = paste(site, site_type,zone))
 
+
 quad_joined <- left_join(quad_working, patch_types, by = "site_id") %>% 
-  mutate(site_type.x = if_else(year == 2024, `2024`, `2025`)) %>% 
-  mutate(site_id = paste(site_id, year))
+  mutate(site_type.x = if_else(year.y == 2024, "2024", "2025")) %>% 
+  mutate(site_id = paste(site_id, year.y))
+
 
 # Figures -----------------------------------------------------------------
 
@@ -230,7 +234,7 @@ converted_measurements <- sampled_urchins_80 %>%
     predicted_mass = a * sampled_sizes + b) #%>%
 #drop sites without dissected urchins
 #filter(!(is.na(predicted_mass)))
-setdiff(sampled_urchins_80$site_id, coeff_wide$site_id)
+#setdiff(sampled_urchins_80$site_id, coeff_wide$site_id)
 
 
 gonad_mass_summ<- converted_measurements %>%
