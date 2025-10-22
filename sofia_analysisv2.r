@@ -81,7 +81,6 @@ quad_joined <- left_join(quad_working, patch_types, by = "site_id") %>%
   mutate(site_type.x = if_else(year.y == 2024, "2024", "2025")) %>% 
   mutate(site_id = paste(site_id, year.y))
 
-
 # Figures -----------------------------------------------------------------
 
 #urchin sizefq for site/type/zone 
