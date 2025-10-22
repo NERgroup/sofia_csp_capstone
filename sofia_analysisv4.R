@@ -164,7 +164,8 @@ gonad_mass_site_zone <- converted_measurement %>%
 #calculate total gonad mass per site
 gonad_mass_site <- goand_mass_site_zone %>%
                   group_by(site_id) %>%
-                  summarize(t_gonad_mass = sum(gonad_mass_g))
+                  summarize(t_gonad_mass = sum(gonad_mass_g)) %>%
+                  mutate(patch_type = word(patch_type, 2))
 
 
 
