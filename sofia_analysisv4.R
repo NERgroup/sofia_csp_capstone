@@ -13,11 +13,11 @@ librarian::shelf(tidyverse,here, janitor, googlesheets4, lubridate, splitstacksh
 
 gonad_raw <- read_sheet("https://docs.google.com/spreadsheets/d/18R1F5KkILws3e-8CYz83BdGYMG8zeuvOIeKcaSXeqC4/edit?gid=1621016945#gid=1621016945")
 
-#load("/Users/sofiarivas/Downloads/kelp_recovery_data (1).rda") #Sofia
-load("/Volumes/enhydra/data/kelp_recovery/MBA_kelp_forest_database/processed/recovery/kelp_recovery_data.rda") #Josh
+load("/Users/sofiarivas/Downloads/kelp_recovery_data (1).rda") #Sofia
+#load("/Volumes/enhydra/data/kelp_recovery/MBA_kelp_forest_database/processed/recovery/kelp_recovery_data.rda") #Josh
 
-#load("/Users/sofiarivas/Downloads/lda_patch_transitionsv2.rda") #Sofia
-load("/Users/jossmith/code_respositories/kelp_recovery/output/lda_patch_transitionsv2.rda") #Josh
+load("/Users/sofiarivas/Downloads/lda_patch_transitionsv2.rda") #Sofia
+#load("/Users/jossmith/code_respositories/kelp_recovery/output/lda_patch_transitionsv2.rda") #Josh
 
 
 # Reworking Data ----------------------------------------------------------
@@ -34,6 +34,13 @@ urchin_sizefq_1 <- urchin_sizefq %>%
   filter(species=="Purple") %>% 
   mutate(year = year(survey_date)) %>% 
   mutate(site_id = paste(site, site_type,zone, year)) 
+
+#join patch types with urchin size fq
+urchin_sizefq_joined <- left_join(urchin_sizefq_1, patch_types, by = "site_id") %>%
+  mutate(site_type.x = if_else(year.y == 2024, "2024", "2025")) %>%
+  mutate(site_id = paste(site_id, year.y)) %>% 
+  rename (year = year.y) %>% 
+  mutate(site_id = word(site_id,1,4))
 
 #select focal vars from dissection data and join patch types
 gonad_build1 <- gonad_raw %>% 
@@ -52,13 +59,32 @@ gonad_build1 <- gonad_raw %>%
   rename(year = year.y) %>% 
   mutate(site_type.x = if_else(year == 2024, "2024", "2025")) %>% 
   mutate(site_id = paste(site_id, year))
+  
+  gonad_build1 <- gonad_raw %>% 
+    select(
+      date_collected, survey_type, site_number, site_type, zone,
+      transect, species, sex, test_diameter_mm, gonad_mass_g, animal_24hr_mass_g
+    ) %>%
+    filter(species %in% c("purple_urchin", "purple_urchins")) %>%
+    mutate(species = "purple_urchin") %>%
+    filter(!is.na(gonad_mass_g)) %>%
+    mutate(
+      year = year(date_collected),
+      site_id = paste(site_number, site_type, zone, year)
+    ) %>%
+    filter(gonad_mass_g < 30, survey_type == "Recovery") %>%
+    
+    # ✅ join patch types
+    left_join(patch_types, by = "site_id") %>%
+    
+    # ✅ if both datasets have a year column, this renames the joined one
+    rename(year = year.y) %>%
+    
+    mutate(
+      site_type.x = if_else(year == 2024, "2024", "2025"),
+      site_id = paste(site_id, year)
+    )
  
-
-#Join patch types with urchin size fq
-urchin_sizefq_joined <- left_join(urchin_sizefq_1, patch_types, by = "site_id") %>%
-  mutate(site_type.x = if_else(year.y == 2024, "2024", "2025")) %>%
-  mutate(site_id = paste(site_id, year.y)) %>% 
-  rename (year = year.y)
 
 #add year and unique identifier to quad data
 quad_working <- quad_data %>% 
@@ -96,7 +122,6 @@ coeff_wide <- coeff_table %>%
   select(site_id, term, estimate) %>%
   pivot_wider(names_from = term, values_from = estimate) %>% 
   rename(b = "(Intercept)", a = "test_diameter_mm")
-
 
 sampled_urchins <- avg_urchin_density %>%
   left_join(urchin_sizefq_joined, by = "site_id") %>%
