@@ -1,9 +1,6 @@
-#just gonad data, no spawning data
-#do i need to convert to cm? 
-rm(list=ls())
-
 # Load First --------------------------------------------------------------
 #install.packages('librarian')
+rm(list=ls())
 require(librarian)
 librarian::shelf(tidyverse,here, janitor, googlesheets4, lubridate, splitstackshape,
                  googledrive,googlesheets4,httpuv,dplyr,ggplot2,pwr2, tidyr, broom)
@@ -44,56 +41,45 @@ urchin_sizefq_joined <- left_join(urchin_sizefq_1, patch_types, by = "site_id") 
 
 #select focal vars from dissection data and join patch types
 gonad_build1 <- gonad_raw %>% 
-  select("date_collected","survey_type","site_number","site_type","zone",
-         "transect","species","sex","test_diameter_mm","gonad_mass_g","animal_24hr_mass_g") %>%
-  filter(species %in% c("purple_urchin","purple_urchins")) %>%
-  mutate(species = "purple_urchin")%>%
+  select(
+    date_collected, survey_type, site_number, site_type, zone, species, sex, 
+    test_diameter_mm, gonad_mass_g, animal_24hr_mass_g) %>%
+  filter(species %in% c("purple_urchin", "purple_urchins")) %>%
+  mutate(species = "purple_urchin") %>%
   filter(!is.na(gonad_mass_g)) %>% 
-  mutate(year = year(date_collected),
-         #year2 = is.character(year),
-         site_id = paste(site_number,site_type,zone,year)) %>% 
-  filter(gonad_mass_g<30) %>% 
-  filter(survey_type == "Recovery") %>%
-  #join patch types
-  left_join(., patch_types, by = c("site_id") %>% 
-  rename(year = year.y) %>% 
-  mutate(site_type.x = if_else(year == 2024, "2024", "2025")) %>% 
-  mutate(site_id = paste(site_id, year))
-  
-  gonad_build1 <- gonad_raw %>% 
-    select(
-      date_collected, survey_type, site_number, site_type, zone,
-      transect, species, sex, test_diameter_mm, gonad_mass_g, animal_24hr_mass_g
-    ) %>%
-    filter(species %in% c("purple_urchin", "purple_urchins")) %>%
-    mutate(species = "purple_urchin") %>%
-    filter(!is.na(gonad_mass_g)) %>%
-    mutate(
-      year = year(date_collected),
-      site_id = paste(site_number, site_type, zone, year)
-    ) %>%
-    filter(gonad_mass_g < 30, survey_type == "Recovery") %>%
-    
-    # ✅ join patch types
-    left_join(patch_types, by = "site_id") %>%
-    
-    # ✅ if both datasets have a year column, this renames the joined one
-    rename(year = year.y) %>%
-    
-    mutate(
-      site_type.x = if_else(year == 2024, "2024", "2025"),
-      site_id = paste(site_id, year)
-    )
- 
+  mutate(
+    year = year(date_collected),
+    site_id = paste(site_number, site_type, zone, year)) %>% 
+  filter(gonad_mass_g < 30, survey_type == "Recovery") 
+
+gonad_joined <- gonad_build1 %>%
+  mutate(
+    site_id = str_squish(site_id),          
+    year = as.numeric(year(date_collected))) %>%
+  left_join(
+    patch_types %>%
+      mutate(site_id = str_squish(site_id)) %>%  
+      distinct(site_id, .keep_all = TRUE) %>%
+      select(site_id, new_type),
+    by = "site_id") %>%
+  mutate(
+    site_type = if_else(year == 2025 & !is.na(new_type), new_type, site_type)) %>%
+  select(-new_type)
 
 #add year and unique identifier to quad data
-quad_working <- quad_data %>% 
-  mutate(year = year(survey_date)) %>% 
-  mutate(site_id = paste(site, site_type,zone, year))
+quad_working <- quad_data %>%
+  mutate(year = year(survey_date)) %>%
+  mutate(site_base = paste(site, site_type, zone))  # base site ID without year
 
-quad_joined <- left_join(quad_working, patch_types, by = "site_id") %>% 
-  mutate(site_type.x = if_else(year.y == 2024, "2024", "2025")) %>% 
-  mutate(site_id = paste(site_id, year.y))
+quad_joined <- quad_working %>%
+  left_join(
+    patch_types %>% select(site, new_type, zone, year),
+    by = c("site" = "site", "zone" = "zone", "year" = "year")
+  ) %>%
+  # Update site_type using new_type for 2025 (or any year where patch info exists)
+  mutate(site_type = if_else(!is.na(new_type), new_type, site_type)) %>%
+  mutate(site_id = paste(site, site_type, zone, year)) %>%
+  select(-site_base, -new_type)  # optional cleanup
 
 
 # Stats and Calculations-------------------------------------------------------------------
@@ -107,7 +93,6 @@ avg_urchin_density <- quad_joined %>%
   #unite(col = site_id, site, site_type, zone, sep=" ", remove = FALSE) %>%
   mutate(density80m2 = avg_density*80) #%>% 
 #mutate(site_id = toupper(site_id))
-
 
 #model for urchin size 
 coeff_table <- gonad_build1 %>%
@@ -173,29 +158,49 @@ converted_measurements <- sampled_urchins_80 %>%
 #calculate site level mean gonad mass
 urchin_gsi <- gonad_build1 %>%
   mutate(
-    GSI = (gonad_mass_g / animal_24hr_mass_g) * 100,
-    #GSI_somatic = (gonad_mass_g / (animal_24hr_mass_g - gonad_mass_g)) * 100
+    GSI = (gonad_mass_g / animal_24hr_mass_g) * 100
+    # GSI_somatic = (gonad_mass_g / (animal_24hr_mass_g - gonad_mass_g)) * 100
   ) %>%
   group_by(site_id) %>%
-  summarize(u_GSI = mean(GSI),
-            sd_GSI = sd(GSI),
-            n_GSI = n(GSI))
+  summarize(
+    u_GSI = mean(GSI, na.rm = TRUE),   # mean GSI per site
+    sd_GSI = sd(GSI, na.rm = TRUE),    # SD per site
+    n_GSI = n()                         # number of urchins per site
+  )
 
 #calcualte gonad mass
-gonad_mass_site_zone <- converted_measurement %>%
+gonad_mass_site_zone <- converted_measurements %>%
                         left_join(., urchin_gsi, by = "site_id") %>% #warning many-to-many is ok
-                        mutate(gonad_mass_g = biomass_g*u_GSI) 
+                        mutate(gonad_mass_g = biomass_g*u_GSI) %>% 
+                        drop_na()
 
 #calculate total gonad mass per site
-gonad_mass_site <- goand_mass_site_zone %>%
+gonad_mass_site_total <- gonad_mass_site_zone %>%
                   group_by(site_id) %>%
                   summarize(t_gonad_mass = sum(gonad_mass_g)) %>%
-                  mutate(patch_type = word(patch_type, 2))
+                  mutate(site_type = word(site_id, 2))
 
+#plots
+ggplot(gonad_mass_site_total, aes(x = site_type, y = t_gonad_mass, fill = site_type)) +
+  geom_boxplot() +
+  scale_fill_manual(values = c(
+    "BAR" = "mediumpurple3",
+    "FOR" = "seagreen",
+    "INCIP" = "lightblue"
+  )) +
+  labs(x = "Site Type", y = "Total Gonad Mass (g)") +
+  theme_classic()
 
+#stats
+anova_model <- aov(t_gonad_mass ~ site_type, data = gonad_mass_site_total)
+summary(anova_model)
 
+TukeyHSD(anova_model)
 
+gonad_mass_site_total %>%
+  group_by(site_type) %>%
+  summarise(shapiro_p = shapiro.test(t_gonad_mass)$p.value)
 
-
+kruskal.test(t_gonad_mass ~ site_type, data = gonad_mass_site_total)
 
 
