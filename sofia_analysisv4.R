@@ -4,7 +4,7 @@ rm(list=ls())
 require(librarian)
 librarian::shelf(tidyverse,here, janitor, googlesheets4, lubridate, splitstackshape,
                  googledrive,googlesheets4,httpuv,dplyr,ggplot2,pwr2, tidyr, broom,ggpubr)
-
+library(paletteer)
 
 
 
@@ -185,7 +185,10 @@ gonad_mass_site_total <- gonad_mass_site_zone %>%
                             t_biomass_kg = t_biomass_g/1000) %>%
                   mutate(site_type = word(site_id, 2),
                          t_gonad_mass_kg = t_gonad_mass/1000,
-                         t_gonad_mass_sim_kg = t_gonad_mass_sim/1000)
+                         t_gonad_mass_sim_kg = t_gonad_mass_sim/1000,
+                         t_gonad_mass_sim_g_m2 = t_gonad_mass_sim/80,
+                         t_biomass_sim_g_m2 = t_biomass_g/80) %>% 
+                  filter(site_type %in% c("BAR", "FOR"))
                   #filter(t_gonad_mass_kg<400)
 
 #total urchins x total gonad mass (natural variability)
@@ -233,27 +236,26 @@ ggsave("biomass_gonadmass_incipient.png")
 
 #total biomass x total gonad mass (without incipient)
 ggplot(
-  gonad_mass_site_total %>% filter(t_biomass_kg < 60,site_type !="INCIP"),
-  aes(x = t_biomass_kg, y = t_gonad_mass_sim_kg, color = site_type, fill = site_type)) +
-  geom_point(alpha = 0.3, size = 2) +      
-  geom_smooth(aes(color = site_type), method = "loess", span = 1, se = TRUE, size = 0.8) +  
+  gonad_mass_site_total %>% filter(site_type != "INCIP"),
+  aes(x = t_biomass_sim_g_m2, y = t_gonad_mass_sim_g_m2, color = site_type, fill = site_type)
+) +
+  geom_point(alpha = 0.3, size = 2) +
+  geom_smooth(aes(color = site_type), method = "loess", span = 1, se = TRUE, size = 1, alpha = 0.4) +
   scale_fill_manual(
     name = "Patch Type",
-    values = c(
-      "BAR" = "slateblue",
-      "FOR" = "darkolivegreen",
-      "INCIP" = "coral"),
-    labels = c("BAR" = "Barren", "FOR" = "Forest", "INCIP" = "Incipient")) +
+    values = c("BAR" = "#7570B3FF", "FOR" = "#1B9E77FF"),
+    labels = c("BAR" = "Barren", "FOR" = "Forest")
+  ) +
   scale_color_manual(
     name = "Patch Type",
-    values = c(
-      "BAR" = "slateblue",
-      "FOR" = "darkolivegreen",
-      "INCIP" = "coral"),
-    labels = c("BAR" = "Barren", "FOR" = "Forest", "INCIP" = "Incipient")) +
+    values = c("BAR" = "#7570B3FF", "FOR" = "#1B9E77FF"),
+    labels = c("BAR" = "Barren", "FOR" = "Forest")
+  ) +
   labs(
-    x = "Total Biomass (kg)",
-    y = "Total Gonad Mass (kg)") +
+    x = "Total Urchin Biomass (g/m²)",
+    y = "Total Gonad Mass (g/m²)"
+  ) +
+  #coord_cartesian(xlim = c(0, 624)) +  
   theme_classic() +
   theme(
     axis.text.x = element_text(size = 10),
@@ -261,7 +263,8 @@ ggplot(
     axis.title.x = element_text(size = 13),
     axis.title.y = element_text(size = 13),
     legend.title = element_text(size = 12),
-    legend.text = element_text(size = 10))
+    legend.text = element_text(size = 10)
+  )
 ggsave("biomass_gonadmass.png")
 
 #site type x gonad mass per 80m2 boxplot (natural variability)
@@ -283,27 +286,25 @@ ggplot(gonad_mass_site_total, aes(x = site_type, y = t_gonad_mass_sim_kg, fill =
     label = "p.signif")
 
 #site type x gonad mass per m2 boxplot (natural variability)
-ggplot(gonad_mass_site_total, aes(x = site_type, y = t_gonad_mass_sim/80, fill = site_type)) +
+ggplot(gonad_mass_site_total %>% filter(site_type != "INCIP"), aes(x = site_type, y = t_gonad_mass_sim/80, fill = site_type)) +
   geom_point(aes(color = site_type), position = position_jitter(width = 0.1), alpha = 0.3, size = 2)+
-  geom_boxplot() +
+  geom_boxplot(width = 0.6) +
   scale_fill_manual(
     name = "Patch Type",   
     values = c(
-      "BAR" = "slateblue",
-      "FOR" = "darkolivegreen",
-      "INCIP" = "coral"),
+      "BAR" = "#7570B3FF",
+      "FOR" = "#1B9E77FF"),
     labels = c("BAR" = "Barren", "FOR" = "Forest", "INCIP" = "Incipient")) +
   scale_color_manual(
     name = "Patch Type",   
     values = c(
-      "BAR" = "slateblue",
-      "FOR" = "darkolivegreen",
-      "INCIP" = "coral"),
-    labels = c("BAR" = "Barren", "FOR" = "Forest", "INCIP" = "Incipient")) +
-  scale_x_discrete(labels = c("BAR" = "Barren", "FOR" = "Forest", "INCIP" = "Incipient")) +
+      "BAR" = "#7570B3FF",
+      "FOR" = "#1B9E77FF"),
+    labels = c("BAR" = "Barren", "FOR" = "Forest")) +
+  scale_x_discrete(labels = c("BAR" = "Barren", "FOR" = "Forest")) +
   labs(
     x = "Patch Type",
-    y = "Total Gonad Mass per m² (g)") +
+    y = "Total Gonad Mass (g/m²)") +
   theme_classic() +
   theme(axis.text.x = element_text(size = 10),
         axis.text.y = element_text(size = 10),
@@ -313,13 +314,11 @@ ggplot(gonad_mass_site_total, aes(x = site_type, y = t_gonad_mass_sim/80, fill =
         legend.text = element_text(size = 10))+
   stat_compare_means(
     comparisons = list(
-      c("BAR", "FOR"),
-      c("BAR", "INCIP"),
-      c("FOR", "INCIP")),
+      c("BAR", "FOR")),
     method = "t.test",
     label = "p.format",
     size = 3.5)
-ggsave("gonadmass_m2_patchtype_boxplot.png")
+ggsave("gonadmass_m2_patchtype_boxplot.png", width = 6, height = 4)
 
 
 #site type x gonad mass per m2 boxplot (not natural variability)
