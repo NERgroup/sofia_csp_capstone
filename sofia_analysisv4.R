@@ -19,7 +19,7 @@ load("/Users/sofiarivas/Downloads/lda_patch_transitionsv2.rda") #Sofia
 #load("/Users/jossmith/code_respositories/kelp_recovery/output/lda_patch_transitionsv2.rda") #Josh
 
 
-# Reworking Data ----------------------------------------------------------
+# Data Wrangling ----------------------------------------------------------
 
 #clean up patch types and make wider
 patch_types <- transitions_tbl_constrained %>%
