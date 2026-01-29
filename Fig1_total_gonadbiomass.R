@@ -49,7 +49,10 @@ linear_model <- gonad_joined %>%
   pivot_wider(names_from = term, values_from = estimate) %>%
   rename(b = `(Intercept)`, a = test_diameter_mm) #y=ax+b
 
-#convert diameter to mass
+
+
+
+###########convert diameter to mass
 converted_measurements <- sampled_urchins_80 %>%    
   left_join(linear_model, by = "site_id_final") %>%
   mutate(size_mm = sampled_sizes*10,
