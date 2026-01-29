@@ -19,6 +19,9 @@ load("Data/kelp_recovery_data.rda")
 #correct patch types 2024-2025
 load("Data/lda_patch_transitionsv2.rda")
 
+#benthic survey data averaged to zone level
+load(file.path("/Volumes/enhydra/data/students/sofia/zone_level_data.rda"))
+
 # Data Wrangling ----------------------------------------------------------
 
 #update patch types
@@ -85,5 +88,10 @@ quad_joined <- left_join(quad_working, patch_types, by = "site_id") %>%
 
 #saved dataframe to project directory --> Data folder
 saveRDS(quad_joined, file = "Data/quad_joined.rds")
+
+#saved dataframe to project directory --> Data folder ** has not been wrangled 
+saveRDS(quad_build3, file = "Data/quad_build3.rds")
+
+
 
 

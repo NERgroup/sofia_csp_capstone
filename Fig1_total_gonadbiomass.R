@@ -27,67 +27,42 @@ sampled_urchins_80 <- left_join(avg_urchin_density,
                                 by = "site_id_final") %>% 
   select(-c(site.x, zone.x, site_type, year.x, site.y, zone.y, year.y, patch_type)) %>%  
   group_by(site_id_final) %>% 
-  summarize(sampled_sizes = list ({
-                                    valid <- !is.na(count) & count > 0
-                                    clean_counts <- count[valid]
-                                    clean_sizes  <- size_cm[valid]
-                                    n_to_sample <- round(first(density80m2))
-                                 if (length(clean_counts) == 0 || sum(clean_counts) == 0 || n_to_sample == 0) 
+  summarize(sampled_sizes = list ({valid <- !is.na(count) & count > 0
+                                   clean_counts <- count[valid]
+                                   clean_sizes  <- size_cm[valid]
+                                   n_to_sample <- round(first(density80m2))
+                                if (length(clean_counts) == 0 || sum(clean_counts) == 0 || n_to_sample == 0) 
                                     {rep(NA, n_to_sample)} 
-                               else {sample(clean_sizes,
+                              else {sample(clean_sizes,
                                              size = n_to_sample,
                                              replace = TRUE,
                                              prob = clean_counts / sum(clean_counts))}}),
                                    .groups = "drop") %>%
   unnest(cols = sampled_sizes)
 
-
-
-
-
-
-
-#model for urchin size 
-coeff_table <- gonad_joined %>%
+#linear regression model for urchin size by site 
+linear_model <- gonad_joined %>%
   group_by(site_id_final) %>%
-  nest() %>%
-  mutate(model = map(data, ~ lm(gonad_mass_g ~ test_diameter_mm, data = .)),
-         tidied = map(model, tidy)) %>%
-  unnest(tidied) %>%
-  select(site_id_final, term, estimate, std.error, statistic, p.value)
-
-coeff_wide <- coeff_table %>%
+  group_modify(~ {m <- lm(gonad_mass_g ~ test_diameter_mm, data = .x)
+  broom::tidy(m)}) %>%
   select(site_id_final, term, estimate) %>%
-  pivot_wider(names_from = term, values_from = estimate) %>% 
-  rename(b = "(Intercept)", a = "test_diameter_mm")
-
-# sampled_urchins <- avg_urchin_density %>%
-#   left_join(urchin_sizefq_joined, by = "site_id") %>%
-#   group_by(site_id) %>%
-#   summarise(
-#     sampled_sizes = list({
-#       valid <- !is.na(count) & count > 0
-#       clean_counts <- count[valid]
-#       clean_sizes  <- size_cm[valid]
-#       n_to_sample <- round(first(avg_density))
-#       if (length(clean_counts) == 0 || sum(clean_counts) == 0 || n_to_sample == 0) {rep(NA, n_to_sample)} 
-#       else {sample(
-#         clean_sizes,
-#         size = n_to_sample,
-#         replace = TRUE,
-#         prob = clean_counts / sum(clean_counts))}}),
-#     .groups = "drop") %>%
-#   unnest(cols = sampled_sizes)
-
-
+  pivot_wider(names_from = term, values_from = estimate) %>%
+  rename(b = `(Intercept)`, a = test_diameter_mm) #y=ax+b
 
 #convert diameter to mass
 converted_measurements <- sampled_urchins_80 %>%    
-  left_join(coeff_wide, by = "site_id_final") %>%
-  mutate(
-    size_mm = sampled_sizes*10,
-    biomass_g = -14.2 + 7.44 * exp(0.04 * size_mm)) %>%
-  mutate(biomass_g = ifelse(biomass_g < 0,1,biomass_g))
+  left_join(linear_model, by = "site_id_final") %>%
+  mutate(size_mm = sampled_sizes*10,
+         biomass_g = -14.2 + 7.44 * exp(0.04 * size_mm),
+         biomass_g = ifelse(biomass_g < 0,1,biomass_g))
+         
+
+converted_measurements <- sampled_urchins_80 %>%    
+  left_join(linear_model, by = "site_id_final") %>%
+  mutate(size_mm = sampled_sizes*10,
+         biomass_g = -14.2 + 7.44 * exp(0.04 * size_mm) %>% 
+  mutate(biomass_g = ifelse(biomass_g < 0,1,biomass_g)
+          
 
 #calculate site level mean gonad mass
 urchin_gsi <- gonad_joined %>%

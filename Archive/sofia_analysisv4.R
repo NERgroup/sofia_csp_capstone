@@ -112,6 +112,19 @@ coeff_wide <- coeff_table %>%
   pivot_wider(names_from = term, values_from = estimate) %>% 
   rename(b = "(Intercept)", a = "test_diameter_mm")
 
+#same thing as coeff_ table/wide but simplified into one string of code
+linear_model <- gonad_joined %>%
+  group_by(site_id_final) %>%
+  nest() %>%
+  mutate(
+    model = map(data, ~ lm(gonad_mass_g ~ test_diameter_mm, data = .)),
+    tidied = map(model, tidy)
+  ) %>%
+  unnest(tidied) %>%
+  select(site_id_final, term, estimate) %>%
+  pivot_wider(names_from = term, values_from = estimate) %>% 
+  rename(b = `(Intercept)`, a = test_diameter_mm)
+
 # sampled_urchins <- avg_urchin_density %>%
 #   left_join(urchin_sizefq_joined, by = "site_id") %>%
 #   group_by(site_id) %>%
