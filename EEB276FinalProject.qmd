@@ -34,7 +34,7 @@ The raw dataset contains \~80 variables with 98 observations. To simplify the da
 
 ```{r}
 #raw data
-predictors_raw <- readRDS("quad_build3.rds") 
+predictors_raw <- readRDS("Data/quad_build3.rds") 
 
 #select relevant columns and delete rows with NA values 
 predictors <- predictors_raw %>% 
@@ -60,6 +60,12 @@ predictors2 <- predictors %>%
 ## Why we chose PCA
 
 Even though we narrowed our dataset, we still had too many variables for the number of observations to produce a reliable model. To deal with this, we used Principal Component Analysis. PCA is a dimensionality reduction technique used to simplify complex datasets by transforming potentially correlated variables (e.g., kelp stipe density, holdfast cover, macroalgal abundance) into a smaller set of variables, called principal components.
+
+-    predictors are likely highly correlated, creating multicollinearity
+
+-   prevents overfitting
+
+-   Bayesian framework handles uncertainty and small sample sizes better
 
 ## Step 1: PCA
 
