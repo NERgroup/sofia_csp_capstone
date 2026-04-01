@@ -1,0 +1,314 @@
+---
+title: "EEB 276 Final Project"
+format: pdf
+editor: visual
+---
+
+## 1. Introduction and Research Question
+
+Kelp forests are among the most productive and biodiverse marine ecosystems on the Pacific coast, providing critical habitat structure and trophic support for a wide range of species. Within these ecosystems, purple sea urchins (*Strongylocentrotus purpuratus*) have a critical ecological role as kelp grazers. Their grazing behavior can either maintain healthy kelp forests or, under certain conditions, contribute to the formation of urchin barrens. These barren states are characterized by high urchin densities, usually dominated by crustose-coralline algae, and little to no macroalgae cover, representing a fundamentally different and less productive ecosystem state. Gonadosomatic index (GI), the ratio of gonad mass to total body mass, serves as an indicator of urchin condition and reproductive potential. As kelp forest restoration efforts expand along the California coast in response to widespread kelp decline, identifying which habitat characteristics predict urchin gonad condition is essential for prioritizing restoration sites and evaluating intervention success. This project applies a Bayesian principal component regression approach to identify key habitat predictors of purple urchin gonad index across survey sites in central California, with the aim of informing evidence-based kelp forest restoration.
+
+## Research Question
+
+To what extent do biological and environmental variables predict **sea urchin gonad index** across kelp forests and urchin barrens, and which variables are the strongest predictors of gonad index?
+
+# 2. Load Relevant Packages
+
+```{r}
+#| output: false
+library(tidyverse) #data wrangling (includes other packages)
+library(dplyr) #data wrangling 
+library(ggplot2) #plotting
+library(brms) #Bayesian statistics 
+library(bayesplot) #posterior probability distributions 
+library(factoextra) #variance plot (scree plot)
+library(tidybayes) #helps convert Bayesian modeling for ggplot2 and tidyverse
+library(patchwork) #put plots together
+```
+
+# 3. Data Wrangling
+
+The data for this project came from a Monterey Bay Aquarium kelp forest recovery research program. From 2024-2025, data was collected during the summer field seasons. Data collected included SCUBA monitoring surveys (recording species density, kelp cover and topography) and purple sea urchin collection from 12 sites (with multiple zones within sites) around Carmel Bay and the Monterey Bay peninsula. Sea urchins were dissected in the lab to calculate mean gonadosomatic index for each zone within sites.
+
+The raw dataset contains \~80 variables with 98 observations. To simplify the dataset for more accurate analysis, we selected 20 variables that we deemed as most relevant to our research question.
+
+```{r}
+#raw data
+predictors_raw <- readRDS("quad_build3.rds") 
+
+#select relevant columns and delete rows with NA values 
+predictors <- predictors_raw %>% 
+   mutate(juveniles = macj + nerj + ptej + lsetj + eisj,
+         n_macro_plants_m2 = n_macro_plants_20m2/20,
+         macro_stipe_density_m2 = macro_stipe_density_20m2/20,
+         adults = (density20m2_ptecal + density20m2_eisarb + density20m2_nerlue + density20m2_lamset)/20,
+         marine_snails = tegula_densitym2 + pomaulax_densitym2,
+         density_cancer = density20m2_cancer_spp/20,
+         density_lamstump = density20m2_lamstump/20,
+         density_macstump = density20m2_macstump/20) %>% 
+  dplyr::select(mean_gi, n_macro_plants_m2, macro_stipe_density_m2, adults,
+juveniles, density_cancer, density_lamstump, density_macstump, relief_cm, risk_index, purple_urchin_densitym2, purple_urchin_conceiledm2, red_urchin_densitym2, red_urchin_conceiledm2, marine_snails, lamr, macr, cov_crustose_coralline, cov_desmarestia_spp, cov_lam_holdfast_live, cov_articulated_coralline, cov_fleshy_red, cov_bare_rock, cov_green_algae, cov_barnacle, cov_bare_sand, cov_colonial_tunicate, cov_dictyota_dictyopteris, cov_sponge, cov_dead_kelp_holdfast_any, cov_mac_holdfast_live, cov_red_turf_2_cm, cov_corynactis_californica, cov_dictyoneurum_spp) %>% 
+  na.omit()
+
+#final dataset for project 
+predictors2 <- predictors %>%
+  dplyr::select(mean_gi, cov_mac_holdfast_live, macro_stipe_density_m2, n_macro_plants_m2, cov_bare_sand, purple_urchin_conceiledm2, cov_crustose_coralline, purple_urchin_densitym2, relief_cm, marine_snails, red_urchin_densitym2, cov_corynactis_californica, cov_barnacle, cov_articulated_coralline, cov_desmarestia_spp, cov_colonial_tunicate, density_lamstump, cov_dead_kelp_holdfast_any, cov_dictyoneurum_spp, red_urchin_conceiledm2)
+```
+
+# 4. Principal Component Analysis and BRMS Model
+
+## Why we chose PCA
+
+Even though we narrowed our dataset, we still had too many variables for the number of observations to produce a reliable model. To deal with this, we used Principal Component Analysis. PCA is a dimensionality reduction technique used to simplify complex datasets by transforming potentially correlated variables (e.g., kelp stipe density, holdfast cover, macroalgal abundance) into a smaller set of variables, called principal components.
+
+## Step 1: PCA
+
+```{r}
+#| message: false
+#| warning: false
+#run PCA: run only on predictor variables, not the response variable (mean_gi)
+#standardize variables 
+pca <- prcomp(predictors2 %>% 
+                dplyr::select(-mean_gi), 
+                scale. = TRUE) 
+
+#visualize 
+fviz_eig(pca)
+```
+
+## Step 2: BRM Model Setup
+
+```{r}
+#create matrix of raw PC scores (reference scree plot)
+pc_scores <- as.data.frame(pca$x[, 1:10])
+
+#add response variable (mean_gi) into new dataframe
+pc_data <- pc_scores %>%
+              mutate(mean_gi = predictors2$mean_gi)
+
+#set priors for brm using PCA 
+priors_pca <- c(
+  prior(normal(0, 1), class = "b"),
+  prior(normal(6.5, 2), class = "Intercept"), #mean mean_gi is ~6.5
+  prior(student_t(3, 0, 2), class = "sigma"))
+
+#density plot to check for normality of the data
+ggplot(pc_data, aes(x = mean_gi)) +
+  geom_density(fill = "steelblue", alpha = 0.5) +
+  labs(x = "Mean GI", y = "Density") +
+  theme_classic()
+
+#Q-Q plot as another way to check for normality 
+ggplot(pc_data, aes(sample = mean_gi)) +
+  stat_qq() +
+  stat_qq_line(color = "red") +
+  labs(x = "Theoretical quantiles", 
+       y = "Sample quantiles",
+       title = "Q-Q plot of mean GI") +
+  theme_classic()
+```
+
+## Step 3: Model Selection
+
+After checking the data's distribution and running the gaussian brm model, we wanted to see if there may be a better distribution family because the distribution is skewed. We then used the posterior predictive checks with pp_check() to visualize the model fit. Then, we re-ran the brm model with only the significant principal components (PCs) from the first gaussian model and used the same process for a skew-normal model. Comparing the model_pca_gaus with the model_pca_skew using loo_compare(), the skew-normal distribution is a better fit for predictive power.
+
+```{r}
+#| output: false
+#run brm model with default normal/gaussian distribution 
+model_pca <- brm(mean_gi ~ .,
+                 data = pc_data,
+                 family = gaussian(),
+                 prior = priors_pca,
+                 chains = 4, iter = 4000, warmup = 2000,
+                 cores = 4)
+```
+
+```{r}
+summary(model_pca) #PC1, PC2, and PC3 are significant!
+
+#posterior predictive check 
+pp_check(model_pca) #mostly fits well, doesn't account for bump around x=2
+```
+
+```{r}
+#| output: false
+#re-run with only significant PCs
+model_pca_gaus <- brm(mean_gi ~ PC1 + PC2 + PC3,
+                                  data = pc_data,
+                                  family = gaussian(),
+                                  prior = priors_pca,
+                                  chains = 4, iter = 4000, warmup = 2000,
+                                  cores = 4)
+```
+
+```{r}
+pp_check(model_pca_gaus)
+```
+
+```{r}
+#| output: false
+#rerun first model with skew_normal distribution 
+model_pca_other <- brm(mean_gi ~ ., 
+                   data = pc_data,
+                   family = skew_normal(), #changed to skew_normal
+                   prior = priors_pca,
+                   chains = 4, iter = 4000, warmup = 2000,
+                   cores = 4)
+```
+
+```{r}
+summary(model_pca_other) #again, PC1, PC2, and PC3 are significant!
+```
+
+```{r}
+#| output: false
+#final model 
+model_pca_skew <- brm(mean_gi ~ PC1 + PC2 + PC3,  # only significant PCs
+                   data = pc_data,
+                   family = skew_normal(), 
+                   prior = priors_pca,
+                   chains = 4, iter = 4000, warmup = 2000,
+                   cores = 4)
+```
+
+```{r}
+summary(model_pca_skew)  
+bayes_R2(model_pca_skew) #check R^2
+
+#posterior predictive check 
+pp_check(model_pca_skew)
+
+#compare gaussian and skew_normal models --> model_pca_skew seems to be the better model! 
+loo_gaussian <- loo(model_pca_gaus, moment_match = TRUE)
+loo_skew <- loo(model_pca_skew, reloo = TRUE)
+loo_compare(loo_gaussian, loo_skew)
+```
+
+# 5. Interpreting and Visualizing Model
+
+Now that we have our model, we can start to interpret and visualize it. Starting with the PCs, we created a for loop to print the variables associated with each significant PC.
+
+## PC Interpretations
+
+PC1, PC2, and PC3 were all significant predictors of purple urchin gonad index in the Bayesian skew-normal model (all 95% CIs excluded zero, Rhats = 1.00).
+
+PC1 was the strongest predictor of purple urchin gonad index (β = 0.80, 95% CI: 0.62–0.96) and represented a gradient from kelp forest to barren-like habitat. Zones scoring high on PC1 were characterized by greater *Macrocystis* holdfast cover, stipe density, macro-algal abundance, and concealed purple urchins (meaning urchins were eating drift kelp rather than live kelp, therefore not contributing to kelp loss). In contrast, zones scoring low on PC1 were characterized by higher crustose-coralline algae cover, marine snail density, exposed red and purple urchin densities, and lower substrate relief, which can be indicators of degraded, barren-like habitat. The positive model coefficient indicates that urchins at kelp forest sites had significantly higher gonad index than those at barren-like sites, consistent with drift kelp being the primary food source supporting urchin gonad development.
+
+PC2 had a negative effect (β = -0.58, 95% CI: -0.82– -0.35), suggesting that sites with higher red urchin density, *Corynactis*, and barnacle cover were associated with lower gonad index compared to sites with articulated coralline algae and *Desmarestia*. PC3 had a moderate positive effect (β = 0.37, 95% CI: 0.13–0.67), where sites with greater algal diversity were associated with higher gonad index relative to sites dominated by *Laminaria* stumps, purple urchin densities, and dead kelp holdfasts.
+
+Together, these three habitat gradients explained 41% of variation in purple urchin gonad index (Bayesian R² = 0.41, 95% CI: 0.32–0.49).
+
+Also, PC1, PC2, and PC3 captured 23%, 12%, and 10% of the total variation in habitat conditions (variables) respectively, together summarizing 45% of the overall habitat structure across sites.
+
+```{r}
+#what variables are included in PC1, PC2, and PC3?
+for(pc in c("PC1","PC2","PC3")) { #starts a for loop 
+  cat("\n---", pc, "---\n") #syntax for output: headers for each PC
+  cat("TOP POSITIVE:\n") #syntax for output: label for the variables with  largest positive loadings for the current PC
+  print(head(sort(pca$rotation[,pc], decreasing = TRUE), 5)) #sorts loadings from largest to smallest, keeps top 5 variables 
+  cat("TOP NEGATIVE:\n") #syntax for output: label for the variables with  largest negative loadings for the current PC
+  print(head(sort(pca$rotation[,pc], decreasing = FALSE), 5))} #sorts loadings from largest to smallest, keeps top 5 variables 
+
+# % habitat structure variance for each PC
+summary(pca)$importance[2, 1:3] * 100 # % variance for each PC 
+```
+
+## Visualizations
+
+The coefficient plot visually presents the three significant PCs and their relative effects on mean GI (basically visualizes the summary table). AS we can see, PC1 is furthest from x=0, meaning it has the highest effect (and positive).
+
+```{r}
+#density curves of each PC showing posterior distributions 
+mcmc_areas(model_pca_skew,
+           pars = vars(starts_with("b_"), -b_Intercept), #plot regression coefficients and exclude intercept 
+           prob = 0.95, #shade the 95% credible interval 
+           prob_outer = 1.0) +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "red") + #dotted line at x=0 for visual assessment 
+  theme_classic()
+
+```
+
+To show how well the model can predict gonad index, we extracted the posterior mean predictions (fitted values) and 95% credible intervals from the model for each observation. We then plot the predictions against the observed mean gonad index values. Each point represents one survey zone within a site, with horizontal error bars showing prediction uncertainty, and the red dashed line representing the ideal predictions. The model does a fairly okay job at predicting mean GI, but because our model accounts for only about 41% of variation in mean GI, the points will not be very close to the line.
+
+```{r}
+pc_data$fitted <- fitted(model_pca_skew)[, "Estimate"] #posterior mean prediction for each observation
+pc_data$lower  <- fitted(model_pca_skew)[, "Q2.5"] #lower 95% credible interval
+pc_data$upper  <- fitted(model_pca_skew)[, "Q97.5"] #upper 95% credible interval
+
+#plot observed vs predicted to see how well the three ecologically meaningful PCs predict gonad index
+ggplot(pc_data, aes(x = fitted/100, y = mean_gi/100)) + #turn units to %
+  geom_point(color = "#466995") + #each dot is one observation 
+  geom_errorbarh(aes(xmin = lower/100, xmax = upper/100), 
+                 alpha = 0.2, 
+                 linewidth = 0.3) + #horizontal error bars showing prediction uncertainty
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "red") + #prediction line 
+  labs(x = "Predicted Mean GI (%)", y = "Observed Mean GI (%)") +
+  scale_x_continuous(limits = c(0,0.15)) +
+  scale_y_continuous(limits = c(0,0.2)) +
+  theme_classic()
+```
+
+The PCA variable plot shows how the variables relate to PC1 and PC2. Arrows point to the right show varaibles correlated to each other and associated with higher mean gonad index (PC1, β = 0.80), such as \# of *Macrocystis* plants, cover of live *Macrocystis* holdfasts, and concealed purple urchins. Arrows to the left indicate the opposite, and are negatively correlated to GI. Arrows pointing upwards are associated with lower mean gonad index (PC2, β = -0.58), such as bare sand cover, crustose-coralline algae cover, and red urchin density. The gradient of colors represents the strength of contribution, so dark blue variables/arrows are the most influential.
+
+The three individual plots are marginal effect plots, showing the relationships between each PC and mean GI. This visualizes each PCs effect on mean GI. As we can see, the observed points are scattered quite a bit in each plot, but the points follow the line best in the PC1 plot.
+
+```{r}
+#plotting PC1 and PC2
+fviz_pca_var(pca, axes = c(1, 2), #specify which PCs to plot
+             select.var = list(contrib = 10),  #only top # contributors for clear visuals 
+             col.var = "contrib",
+             repel = TRUE,
+               labelsize = 2,
+             gradient.cols = c("grey80", "steelblue", "darkblue")) +
+  labs(title = "PCA variable plot: PC1 and PC2",
+       x = "PC1 (22.7%)",
+       y = "PC2 (11.9%)",
+       color = "Contribution (%)")+
+  theme_classic()
+
+#Rework data to plot PCs separately 
+ce <- conditional_effects(model_pca_skew)
+
+# Extract the data from conditional effects
+ce_pc1 <- as.data.frame(ce[["PC1"]])
+ce_pc2 <- as.data.frame(ce[["PC2"]])
+ce_pc3 <- as.data.frame(ce[["PC3"]])
+
+# Build plots from scratch
+p1 <- ggplot(ce_pc1, aes(x = PC1, y = estimate__)) +
+  geom_ribbon(aes(ymin = lower__, ymax = upper__), 
+              fill = "lightblue", alpha = 0.5) +
+  geom_line(color = "steelblue") +
+  geom_point(data = pc_data, aes(x = PC1, y = mean_gi),
+             color = "#466995", alpha = 0.6) +
+  labs(x = "PC1",
+       y = "Mean GI (%)") +
+  theme_classic()
+
+p2 <- ggplot(ce_pc2, aes(x = PC2, y = estimate__)) +
+  geom_ribbon(aes(ymin = lower__, ymax = upper__),
+              fill = "lightblue", alpha = 0.5) +
+  geom_line(color = "steelblue") +
+  geom_point(data = pc_data, aes(x = PC2, y = mean_gi),
+             color = "#466995", alpha = 0.6) +
+  labs(x = "PC2",
+       y = "Mean GI (%)") +
+  theme_classic()
+
+p3 <- ggplot(ce_pc3, aes(x = PC3, y = estimate__)) +
+  geom_ribbon(aes(ymin = lower__, ymax = upper__),
+              fill = "lightblue", alpha = 0.5) +
+  geom_line(color = "steelblue") +
+  geom_point(data = pc_data, aes(x = PC3, y = mean_gi),
+             color = "#466995", alpha = 0.6) +
+  labs(x = "PC3",
+       y = "Mean GI (%)") +
+  theme_classic()
+
+# Combine
+p1 + p2 + p3
+```
+
+# 6. Conclusion
+
+This project demonstrated that habitat structure is a significant predictor of purple urchin gonad index across survey sites in central California, with three principal habitat gradients collectively explaining 41% of variation in gonad condition (Bayesian R² = 0.41, 95% CI: 0.32–0.49). PC1 (representing kelp forest structure) emerged as the strongest predictor, with sites characterized by greater *Macrocystis* holdfast cover, stipe density, and macroalgal plant abundance associated with significantly higher gonad index. PC2 had a significant negative effect, indicating that exposed, barren-like sites with high red urchin density and low structural complexity were associated with poorer gonad condition. PC3 had a moderate positive effect, suggesting that sites with greater macroalgal diversity supported better urchin condition relative to sites dominated by purple urchins and dead kelp remnants. Together, these findings suggest that gonad condition may reflect the broader ecological state of a site, and that habitat-based variables may serve as useful indicators for predicting urchin condition. For restoration practitioners, these results highlight the importance of restoring not just urchin density but the broader habitat conditions that support urchin condition, and suggest that sites with intact kelp structure and high algal diversity are likely to support urchins with greater reproductive potential and higher gonad quality.

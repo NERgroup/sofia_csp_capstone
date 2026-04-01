@@ -90,7 +90,7 @@ quad_joined <- left_join(quad_working, patch_types, by = "site_id") %>%
 saveRDS(quad_joined, file = "Data/quad_joined.rds")
 
 #saved dataframe to project directory --> Data folder ** has not been wrangled 
-saveRDS(quad_build3, file = "Data/quad_build3.rds")
+#saveRDS(quad_build3, file = "Data/quad_build3.rds")
 
 
 
